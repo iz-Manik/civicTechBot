@@ -1,0 +1,180 @@
+import gradio as gr
+import os
+import requests
+import time
+from dotenv import load_dotenv
+load_dotenv()
+
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+MODEL_NAME = "llama-3.3-70b-versatile"
+
+system_prompts = {
+    "Hazard Alerts (INDIANA)": """You are a hazard alert assistant for Indiana, providing users with real-time updates about weather warnings and disaster declarations from official sources like NWS and FEMA.""",
+    "Adaptive Crisis Response (ARK)": """You are ARK, the Adaptive Response Keeper, a versatile AI assistant trained to support individuals during crises...""",
+    "Emotional Support (RAY)": """You are RAY, Resilient Assisstant for You an emotionally intelligent AI assistant...""",
+    "Survival & Logistics (BOLT)": """You are BOLT, Brave Outreach for Logistics & Tactics, a crisis logistics bot...""",
+    "Disaster Preparedness (READYBOT)": """You are READYBOT, Readiness Engine for Assisting Disaster Yield..."""
+}
+
+variant_intros = {
+    "Hazard Alerts (INDIANA)": "Hello, I am your **Indiana Hazard Alert Bot** — providing live updates on severe weather and disasters in Indiana.",
+    "Adaptive Crisis Response (ARK)": "Hello, I am **ARK** — the *Adaptive Response Keeper*...",
+    "Emotional Support (RAY)": "Hi, I am **RAY** — *Resilient Assistant for You*...",
+    "Survival & Logistics (BOLT)": "Hello, I am **BOLT** — *Brave Outreach for Logistics & Tactics*...",
+    "Disaster Preparedness (READYBOT)": "Greetings, I am **READYBOT** — *Readiness Engine..."
+}
+
+variant_colors = {
+    "Hazard Alerts (INDIANA)": {"bg": "#b91c1c", "text": "#ffffff"},
+    "Adaptive Crisis Response (ARK)": {"bg": "#1e3a8a", "text": "#ffffff"},
+    "Emotional Support (RAY)": {"bg": "#9333ea", "text": "#ffffff"},
+    "Survival & Logistics (BOLT)": {"bg": "#0f766e", "text": "#ffffff"},
+    "Disaster Preparedness (READYBOT)": {"bg": "#ca8a04", "text": "#000000"}
+}
+
+def get_groq_api_key():
+    return os.environ.get("GROQ_API_KEY")
+
+def query_groq(message, chat_history, variant):
+    if variant == "Hazard Alerts (INDIANA)":
+        nws_url = "https://api.weather.gov/alerts/active?area=IN"
+        fema_url = "https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries?$filter=state eq 'IN'"
+        try:
+            nws_response = requests.get(nws_url, timeout=10).json()
+            fema_response = requests.get(fema_url, timeout=10).json()
+            alerts = nws_response.get("features", [])
+            disasters = fema_response.get("DisasterDeclarationsSummaries", [])
+            alert_msg = f"📡 NWS Alerts: {len(alerts)} active alerts.\n"
+            for alert in alerts[:3]:
+                props = alert.get("properties", {})
+                alert_msg += f"- {props.get('event')}: {props.get('headline')}\n"
+
+            disaster_msg = f"\n📜 FEMA Disasters: {len(disasters)} records.\n"
+            recent = disasters[:3]
+            for d in recent:
+                disaster_msg += f"- {d.get('incidentType')} on {d.get('declarationDate')} in {d.get('designatedArea')}.\n"
+
+            return alert_msg + disaster_msg
+        except Exception as e:
+            return f"⚠️ Error fetching hazard data: {e}"
+
+    # original Groq API logic
+    GROQ_API_KEY = get_groq_api_key()
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    messages = [{"role": "system", "content": system_prompts[variant]}]
+    for msg in chat_history:
+        messages.append(msg)
+    messages.append({"role": "user", "content": message})
+
+    response = requests.post(GROQ_API_URL, headers=headers, json={
+        "model": MODEL_NAME,
+        "messages": messages,
+        "temperature": 0.7
+    })
+
+    if response.status_code == 200:
+        return response.json()["choices"][0]["message"]["content"]
+    else:
+        return f"Error {response.status_code}: {response.text}"
+
+def query_groq(message, chat_history, variant):
+    GROQ_API_KEY = get_groq_api_key()
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    messages = [{"role": "system", "content": system_prompts[variant]}]
+    for msg in chat_history:
+        messages.append(msg)
+    messages.append({"role": "user", "content": message})
+
+    response = requests.post(GROQ_API_URL, headers=headers, json={
+        "model": MODEL_NAME,
+        "messages": messages,
+        "temperature": 0.7
+    })
+
+    if response.status_code == 200:
+        return response.json()["choices"][0]["message"]["content"]
+    else:
+        return f"Error {response.status_code}: {response.text}"
+
+def respond(message, chat_history, variant):
+    bot_reply = query_groq(message, chat_history, variant)
+    chat_history.append({"role": "user", "content": message})
+    chat_history.append({"role": "assistant", "content": ""})
+
+    for i in range(1, len(bot_reply) + 1):
+        chat_history[-1]["content"] = bot_reply[:i]
+        time.sleep(0.00001)
+        yield "", chat_history
+
+def hex_to_rgba(hex_color, alpha=0.4):
+    hex_color = hex_color.lstrip('#')
+    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+def generate_css(variant):
+    colors = variant_colors[variant]
+    bg, text = colors['bg'], colors['text']
+    rgba_bg = hex_to_rgba(bg, 0.3)
+    rgba_border = hex_to_rgba(bg, 0.5)
+
+    return f"""
+    <style>
+    body, .gradio-container {{
+        background: linear-gradient(80deg, {rgba_bg}, black);
+        color: {text} !important;
+    }}
+    .gr-button, .gr-textbox, .gr-dropdown {{
+        border: 2px solid;
+        border-image: linear-gradient(135deg, {rgba_border}, black) 1;
+        background: linear-gradient(135deg, black, {rgba_bg});
+        color: {text} !important;
+        border-radius: 6px;
+        font-weight: bold;
+    }}
+    .gr-button:hover {{
+        background: linear-gradient(135deg, {bg}, black);
+        color: #ffffff !important;
+    }}
+    .message.bot, .message.user {{
+        border: 2px solid {rgba_border} !important;
+        background: linear-gradient(135deg, {rgba_bg}, black);
+        color: {text} !important;
+    }}
+    </style>
+    """
+
+with gr.Blocks() as demo:
+    css_box = gr.HTML()
+    gr.Markdown("## 🛡️ Crisis Support Chatbot (Powered by GROQ)")
+
+    variant_selector = gr.Dropdown(
+        choices=list(system_prompts.keys()),
+        value="Hazard Alerts (INDIANA)",
+        label="Choose Chatbot Variant"
+    )
+
+    chatbot = gr.Chatbot(label="Crisis Assistant", height=480, type="messages")
+    msg = gr.Textbox(label="Ask a question")
+    clear = gr.Button("Clear Chat")
+    state = gr.State([])
+
+    def show_initial_message(variant):
+        intro = variant_intros[variant]
+        css = generate_css(variant)
+        return [{"role": "assistant", "content": intro}], [], css
+
+    demo.load(fn=show_initial_message, inputs=variant_selector, outputs=[chatbot, state, css_box])
+    variant_selector.change(show_initial_message, inputs=variant_selector, outputs=[chatbot, state, css_box])
+
+    msg.submit(respond, [msg, state, variant_selector], [msg, chatbot])
+    clear.click(lambda: ([], []), None, [chatbot, state])
+
+demo.launch(share=True)
+
