@@ -2,6 +2,7 @@ import gradio as gr
 import os
 import requests
 import time
+from deep_translator import GoogleTranslator
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -43,6 +44,13 @@ variant_colors = {
 
 def get_groq_api_key():
     return os.environ.get("GROQ_API_KEY")
+
+def translate_text(text, target_lang='en'):
+    try:
+        return GoogleTranslator(source='auto', target=target_lang).translate(text)
+    except Exception as e:
+        return f"[Translation Error]: {e}"
+
 
 def query_groq(message, chat_history, variant):
     if variant == "Hazard Alerts (INDIANA)":
@@ -112,13 +120,16 @@ def query_groq(message, chat_history, variant):
     else:
         return f"Error {response.status_code}: {response.text}"
 
-def respond(message, chat_history, variant):
-    bot_reply = query_groq(message, chat_history, variant)
+def respond(message, chat_history, variant, lang):
+    translated_input = translate_text(message, target_lang='en')
+    bot_reply = query_groq(translated_input, chat_history, variant)
+    translated_reply = translate_text(bot_reply, target_lang=lang)
+
     chat_history.append({"role": "user", "content": message})
     chat_history.append({"role": "assistant", "content": ""})
 
-    for i in range(1, len(bot_reply) + 1):
-        chat_history[-1]["content"] = bot_reply[:i]
+    for i in range(1, len(translated_reply) + 1):
+        chat_history[-1]["content"] = translated_reply[:i]
         time.sleep(0.00001)
         yield "", chat_history
 
@@ -160,14 +171,29 @@ def generate_css(variant):
     """
 
 with gr.Blocks() as demo:
-    css_box = gr.HTML()
-    gr.Markdown("## 🛡️ Crisis Support Chatbot (Powered by GROQ)")
+    css_box = gr.HTML()  # For dynamic CSS injection
 
-    variant_selector = gr.Dropdown(
-        choices=list(system_prompts.keys()),
-        value="Hazard Alerts (INDIANA)",
-        label="Choose Chatbot Variant"
-    )
+    gr.Markdown("## 🛡️ Civic Tech Chatbot (Powered by GROQ)")
+
+    with gr.Row():
+        variant_selector = gr.Dropdown(
+            choices=list(system_prompts.keys()),
+            value="Hazard Alerts (INDIANA)",
+            label="Choose Chatbot Variant"
+        )
+        language_selector = gr.Dropdown(
+            choices=[
+                ("English", "en"),
+                ("Spanish", "es"),
+                ("Hindi", "hi"),
+                ("French", "fr"),
+                ("Chinese (Simplified)", "zh-cn"),
+                ("Arabic", "ar"),
+                ("Russian", "ru")
+            ],
+            value="en",
+            label="Choose Language"
+        )
 
     chatbot = gr.Chatbot(label="Crisis Assistant", height=480, type="messages")
     msg = gr.Textbox(label="Ask a question")
@@ -181,8 +207,7 @@ with gr.Blocks() as demo:
 
     demo.load(fn=show_initial_message, inputs=variant_selector, outputs=[chatbot, state, css_box])
     variant_selector.change(show_initial_message, inputs=variant_selector, outputs=[chatbot, state, css_box])
-
-    msg.submit(respond, [msg, state, variant_selector], [msg, chatbot])
+    msg.submit(respond, [msg, state, variant_selector, language_selector], [msg, chatbot])
     clear.click(lambda: ([], []), None, [chatbot, state])
 
 demo.launch(share=True)
