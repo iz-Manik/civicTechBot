@@ -2,12 +2,15 @@ import gradio as gr
 import os
 import requests
 import time
+import whisper
 from deep_translator import GoogleTranslator
+from gradio.components import Audio
 from dotenv import load_dotenv
 load_dotenv()
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL_NAME = "llama-3.3-70b-versatile"
+model_whisper = whisper.load_model("base")
 
 system_prompts = {
     "Hazard Alerts (INDIANA)": """You are a hazard alert assistant for Indiana, providing users with real-time updates about weather warnings and disaster declarations from official sources like NWS and FEMA.""",
@@ -51,6 +54,14 @@ def translate_text(text, target_lang='en'):
     except Exception as e:
         return f"[Translation Error]: {e}"
 
+def transcribe_and_respond(audio_path, chat_history, variant, lang):
+    try:
+        result = model_whisper.transcribe(audio_path)
+        transcribed_text = result["text"]
+    except Exception as e:
+        transcribed_text = f"[Speech Recognition Error]: {e}"
+
+    return respond(transcribed_text, chat_history, variant, lang)
 
 def query_groq(message, chat_history, variant):
     if variant == "Hazard Alerts (INDIANA)":
@@ -196,7 +207,9 @@ with gr.Blocks() as demo:
         )
 
     chatbot = gr.Chatbot(label="Crisis Assistant", height=480, type="messages")
-    msg = gr.Textbox(label="Ask a question")
+    with gr.Row():
+        msg = gr.Textbox(label="Ask a question", lines=1)
+        voice_input = gr.Audio(type="filepath", label="🎙️ Speak", interactive=True)
     clear = gr.Button("Clear Chat")
     state = gr.State([])
 
@@ -208,6 +221,7 @@ with gr.Blocks() as demo:
     demo.load(fn=show_initial_message, inputs=variant_selector, outputs=[chatbot, state, css_box])
     variant_selector.change(show_initial_message, inputs=variant_selector, outputs=[chatbot, state, css_box])
     msg.submit(respond, [msg, state, variant_selector, language_selector], [msg, chatbot])
+    voice_input.change(transcribe_and_respond, [voice_input, state, variant_selector, language_selector], [msg, chatbot])
     clear.click(lambda: ([], []), None, [chatbot, state])
 
 demo.launch(share=True)
