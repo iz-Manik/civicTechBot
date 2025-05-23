@@ -3,9 +3,8 @@
 *A Next-Generation Disaster Response Platform for Community Safety*
 
 [![Demo Video](https://img.shields.io/badge/Demo-Video_Link-blue)](your-demo-link)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-![Civic Guardian Interface Screenshot](screenshots/interface.png)
+![Civic Guardian Interface Screenshot](./Interface.png)
 
 ## 🌟 Inspiration
 Inspired by recent climate disasters and the growing need for accessible crisis management tools, Civic Guardian was born from the vision to democratize disaster response. Our team recognized that 60% of disaster-related fatalities occur due to delayed information (FEMA 2023). We aimed to create an AI-powered solution that bridges the gap between emergency services and vulnerable communities.
@@ -13,27 +12,27 @@ Inspired by recent climate disasters and the growing need for accessible crisis 
 ## 🚀 Key Features
 
 ### Multi-Modal Crisis Assistance
-- **Hazard Alerts (INDIANA):** Real-time NWS/FEMA integration with live mapping  
-- **Adaptive Crisis Response (ARK):** AI-guided emergency protocols  
-- **Emotional Support (RAY):** Mental health first-aid companion  
-- **Survival Logistics (BOLT):** Crowdsourced resource coordination  
-- **Disaster Prep (READYBOT):** Personalized readiness plans  
+- **Hazard Alerts (INDIANA):** Real-time NWS/FEMA integration with live mapping
+- **Adaptive Crisis Response (ARK):** AI-guided emergency protocols
+- **Emotional Support (RAY):** Mental health first-aid companion
+- **Survival Logistics (BOLT):** Crowdsourced resource coordination
+- **Disaster Prep (READYBOT):** Personalized readiness plans
 
 ### Cutting-Edge Tech Stack
-- **Real-Time Hazard Mapping**  
-  ![Live Hazard Map](screenshots/map.png)
-- **Multilingual Support** (8 languages)  
-- **Voice-to-AI Interface** (Whisper STT)  
-- **SMS Alert System** (Twilio Integration)  
+- **Real-Time Hazard Mapping**
+  ![Live Hazard Map](./Hazard_Map.png)
+- **Multilingual Support** (8 languages)
+- **Voice-to-AI Interface** (Whisper STT)
+- **SMS Alert System** (Twilio Integration)
 - **Dynamic Personality Switching**
 
 ## 🛠️ Technologies Used
-- **AI Core**: Groq LPU + LLaMA-3 70B  
-- **Frontend**: Gradio + Folium  
-- **Speech**: OpenAI Whisper  
-- **Comms**: Twilio SMS API  
-- **Data**: NWS/FEMA Live APIs  
-- **Translations**: Google Translator  
+- **AI Core**: Groq LPU + LLaMA-3 70B
+- **Frontend**: Gradio + Folium
+- **Speech**: OpenAI Whisper
+- **Comms**: Twilio SMS API
+- **Data**: NWS/FEMA Live APIs
+- **Translations**: Google Translator
 
 ## 🏆 Hackathon Impact
 **Key Innovations:**
