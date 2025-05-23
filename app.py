@@ -3,6 +3,8 @@ import os
 import requests
 import time
 import whisper
+import folium
+from folium.plugins import MarkerCluster
 from deep_translator import GoogleTranslator
 from twilio.rest import Client
 import threading
@@ -44,6 +46,41 @@ variant_colors = {
     "Disaster Preparedness (READYBOT)": {"bg": "#ca8a04", "text": "#000000"}
 }
 
+# Map functions
+def default_map_html():
+    map_obj = folium.Map(location=[39.7684, -86.1581], zoom_start=7)
+    return map_obj._repr_html_()
+
+def create_hazard_map(alerts):
+    hazard_map = folium.Map(location=[39.7684, -86.1581], zoom_start=7)
+    marker_cluster = MarkerCluster().add_to(hazard_map)
+
+    for alert in alerts:
+        properties = alert.get('properties', {})
+        geometry = alert.get('geometry', {})
+
+        if geometry and properties:
+            coords = []
+            if geometry['type'] == 'Point':
+                coords = [geometry['coordinates'][1], geometry['coordinates'][0]]
+            elif geometry['type'] == 'Polygon':
+                coords = [geometry['coordinates'][0][0][1], geometry['coordinates'][0][0][0]]
+
+            if coords:
+                popup_content = f"""
+                <b>{properties.get('event', 'Unknown')}</b><br>
+                <i>{properties.get('headline', 'No details')}</i><br>
+                <small>Effective: {properties.get('effective', 'Unknown')}<br>
+                Expires: {properties.get('expires', 'Unknown')}</small>
+                """
+                folium.Marker(
+                    location=coords,
+                    popup=popup_content,
+                    icon=folium.Icon(color='red', icon='exclamation-triangle')
+                ).add_to(marker_cluster)
+
+    return hazard_map._repr_html_()
+
 def get_groq_api_key():
     return os.getenv("GROQ_API_KEY")
 
@@ -68,22 +105,21 @@ def query_groq(message, chat_history, variant):
             result += f"\n📜 FEMA Disasters: {len(disasters)}\n"
             for d in disasters[:3]:
                 result += f"- {d['incidentType']} on {d['declarationDate']} in {d['designatedArea']}\n"
-            return result
+
+            map_html = create_hazard_map(alerts) if alerts else default_map_html()
+            return result, map_html
         except Exception as e:
-            return f"[Data Fetch Error]: {e}"
+            return f"[Data Fetch Error]: {e}", default_map_html()
 
     headers = {
         "Authorization": f"Bearer {get_groq_api_key()}",
         "Content-Type": "application/json"
     }
 
-    # Convert chat history to the format expected by the API
     messages = [{"role": "system", "content": system_prompts[variant]}]
     for msg in chat_history:
-        if msg[0] is not None:  # User message
-            messages.append({"role": "user", "content": msg[0]})
-        if msg[1] is not None:  # Assistant message
-            messages.append({"role": "assistant", "content": msg[1]})
+        if msg[0]: messages.append({"role": "user", "content": msg[0]})
+        if msg[1]: messages.append({"role": "assistant", "content": msg[1]})
     messages.append({"role": "user", "content": message})
 
     try:
@@ -93,25 +129,23 @@ def query_groq(message, chat_history, variant):
             "temperature": 0.7
         })
         if response.status_code == 200:
-            return response.json()["choices"][0]["message"]["content"]
+            return response.json()["choices"][0]["message"]["content"], default_map_html()
         else:
-            return f"[GROQ API Error {response.status_code}]: {response.text}"
+            return f"[GROQ API Error {response.status_code}]: {response.text}", default_map_html()
     except Exception as e:
-        return f"[Request Error]: {e}"
+        return f"[Request Error]: {e}", default_map_html()
 
 def respond(message, chat_history, variant, lang):
     translated_input = translate_text(message, 'en')
-    bot_reply = query_groq(translated_input, chat_history, variant)
+    bot_reply, map_html = query_groq(translated_input, chat_history, variant)
     translated_reply = translate_text(bot_reply, lang)
 
-    # Append user message and empty assistant message
     chat_history.append((message, None))
 
-    # Stream the response
     for i in range(1, len(translated_reply) + 1):
         chat_history[-1] = (message, translated_reply[:i])
         time.sleep(0.00001)
-        yield "", chat_history
+        yield "", chat_history, map_html
 
 def transcribe_and_respond(audio_path, chat_history, variant, lang):
     try:
@@ -119,7 +153,12 @@ def transcribe_and_respond(audio_path, chat_history, variant, lang):
         text = result["text"]
     except Exception as e:
         text = f"[Speech Error]: {e}"
-    return respond(text, chat_history, variant, lang)
+
+    response_gen = respond(text, chat_history, variant, lang)
+    final_msg, final_chat, final_map = None, None, None
+    for msg, chat, map_html in response_gen:
+        final_msg, final_chat, final_map = msg, chat, map_html
+    return final_msg, final_chat, final_map
 
 def send_sms_alert(message):
     try:
@@ -174,6 +213,12 @@ def generate_css(variant):
         border-radius: 6px;
         font-weight: bold;
     }}
+    #map {{
+        height: 500px !important;
+        margin-top: 20px;
+        border-radius: 10px;
+        border: 2px solid {border};
+    }}
     </style>
     """
 
@@ -183,29 +228,66 @@ with gr.Blocks() as demo:
     gr.Markdown("## 🛡️ Civic Tech Chatbot (Powered by GROQ)")
 
     with gr.Row():
-        variant_selector = gr.Dropdown(label="Choose Chatbot Variant", choices=list(system_prompts.keys()), value="Hazard Alerts (INDIANA)")
-        language_selector = gr.Dropdown(label="Choose Language", choices=[
-            ("English", "en"), ("Spanish", "es"), ("Hindi", "hi"),
-            ("French", "fr"), ("Chinese", "zh-cn"), ("Arabic", "ar"), ("Russian", "ru")
-        ], value="en")
+        variant_selector = gr.Dropdown(
+            label="Choose Chatbot Variant",
+            choices=list(system_prompts.keys()),
+            value="Hazard Alerts (INDIANA)"
+        )
+        language_selector = gr.Dropdown(
+            label="Choose Language",
+            choices=[
+                ("English", "en"), ("Spanish", "es"), ("Hindi", "hi"),
+                ("French", "fr"), ("Chinese(Simplified)", "zh-cn"), ("Arabic", "ar"), ("Russian", "ru")
+            ],
+            value="en"
+        )
 
-    chatbot = gr.Chatbot(label="Crisis Assistant", height=480)
+    chatbot = gr.Chatbot(label="Crisis Assistant", height=400)
     msg = gr.Textbox(label="Ask a question")
     voice_input = gr.Audio(type="filepath", label="🎙️ Speak your question")
     clear = gr.Button("Clear Chat")
+    hazard_map = gr.HTML(
+        label="Hazard Map",
+        value=default_map_html(),
+        elem_id="map"
+    )
+
     state = gr.State([])
 
     def show_initial(variant):
         intro = variant_intros[variant]
         css = generate_css(variant)
-        return [(None, intro)], css
+        _, map_html = query_groq("", [], variant)
+        return [(None, intro)], css, map_html, [(None, intro)]  # Added chat history for chatbot
 
-    variant_selector.change(fn=show_initial, inputs=variant_selector, outputs=[state, css_box])
-    msg.submit(respond, inputs=[msg, state, variant_selector, language_selector], outputs=[msg, chatbot])
-    voice_input.change(transcribe_and_respond, inputs=[voice_input, state, variant_selector, language_selector], outputs=[msg, chatbot])
-    clear.click(lambda: ([], "", ""), outputs=[state, msg, chatbot])
+    # Updated variant change handler
+    variant_selector.change(
+        fn=show_initial,
+        inputs=variant_selector,
+        outputs=[state, css_box, hazard_map, chatbot]  # Match all 4 outputs
+    )
 
-    state.value, css_box.value = show_initial("Hazard Alerts (INDIANA)")
+    # Initialize components properly
+    initial_state, initial_css, initial_map, initial_chat = show_initial("Hazard Alerts (INDIANA)")
+    state.value = initial_state
+    css_box.value = initial_css
+    hazard_map.value = initial_map
+    chatbot.value = initial_chat  # Initialize chatbot with initial state
+
+    msg.submit(
+        respond,
+        inputs=[msg, state, variant_selector, language_selector],
+        outputs=[msg, chatbot, hazard_map]
+    )
+    voice_input.change(
+        transcribe_and_respond,
+        inputs=[voice_input, state, variant_selector, language_selector],
+        outputs=[msg, chatbot, hazard_map]
+    )
+    clear.click(
+        lambda: ([], "", "", default_map_html()),
+        outputs=[state, msg, chatbot, hazard_map]
+    )
 
 # Background hazard monitor
 threading.Thread(target=hazard_alert_monitor, daemon=True).start()

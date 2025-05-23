@@ -1,3 +1,8 @@
-gradio>=4.0.0
+gradio==4.22.0
 requests
+whisper
+folium
+deep-translator
+twilio
 python-dotenv
+torch  # Required by whisper; exact version depends on your system (CUDA or CPU)
