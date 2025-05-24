@@ -5,4 +5,10 @@ folium
 deep-translator
 twilio
 python-dotenv
-torch  # Required by whisper; exact version depends on your system (CUDA or CPU)
+
+# Optimized CPU-only PyTorch (replaces default "torch")
+torch==2.1.2+cpu
+torchvision==0.16.2+cpu
+torchaudio==2.1.2
+
+--extra-index-url https://download.pytorch.org/whl/cpu
