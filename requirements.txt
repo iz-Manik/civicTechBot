@@ -1,6 +1,6 @@
 gradio==4.22.0
 requests
-whisper
+openai-whisper
 folium
 deep-translator
 twilio
