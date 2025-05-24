@@ -62,7 +62,7 @@ cp .env.example .env
 python app.py
 ```
 
-Access via: http://localhost:7860
+Access via: https://huggingface.co/spaces/iz-manik/Civic-Tech-Bot
 
 ## 🌍 Real-World Application
 **Use Cases:**
